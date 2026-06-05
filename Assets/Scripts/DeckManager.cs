@@ -1,6 +1,7 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class DeckManager : MonoBehaviour
 {
@@ -11,6 +12,8 @@ public class DeckManager : MonoBehaviour
 
     private PlayerDataManager pdm;
     private CardData cardData;
+
+    public Text numberText;
 
     private List<GameObject> cardPool = new List<GameObject>();
     // Start is called before the first frame update
@@ -29,6 +32,7 @@ public class DeckManager : MonoBehaviour
 
     public void UpdateDeck()
     {
+        numberText.text = "DeckCards Number:" + GetTotalDeckCount();
         ClearPool();
         for (int i = 0; i < pdm.playerDeck.Length; i++)
         {
@@ -54,5 +58,15 @@ public class DeckManager : MonoBehaviour
     public void OnClickSave()
     {
         pdm.SavePlayerData();
+    }
+    // 计算卡组总卡牌数（仅新增，不影响原有功能）
+    public int GetTotalDeckCount()
+    {
+        int total = 0;
+        for (int i = 0; i < pdm.playerDeck.Length; i++)
+        {
+            total += pdm.playerDeck[i];
+        }
+        return total;
     }
 }

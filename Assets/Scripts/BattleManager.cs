@@ -2,6 +2,8 @@ using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.Events;
+using UnityEngine.UI;
+using UnityEngine.SceneManagement;
 
 public enum GamePhase
 {
@@ -33,8 +35,15 @@ public class BattleManager : MonoSingleton<BattleManager>
     public int playerHealthPoint;
     public int enemyHealthPoint;
 
+    // 血量UI（拖头像下的Text）
+    public Text playerHpText;
+    public Text enemyHpText;
+    // 新增：对局结束后跳转的场景名（在Inspector可修改）
+    public string backToScene = "BuildDeck";
+
     public GameObject playerIcon;
     public GameObject enemyIcon;
+
 
     // 召唤次数
     public int maxPlayerSummonCount;
@@ -59,6 +68,8 @@ public class BattleManager : MonoSingleton<BattleManager>
     // private Dictionary<string, UnityEvent> eventDic = new Dictionary<string, UnityEvent>();
     public UnityEvent phaseChangeEvent;
 
+    // 🔥【仅新增这1行】标记是否可以直接攻击玩家
+    private bool canStraightAttack;
 
     // Start is called before the first frame update
     void Start()
@@ -70,6 +81,39 @@ public class BattleManager : MonoSingleton<BattleManager>
     void Update()
     {
 
+    }
+
+    private void CheckGameOver()
+    {
+        // 敌方血量<=0 → 玩家获胜
+        if (enemyHealthPoint <= 0)
+        {
+            Debug.Log("✅ 敌方血量归零，玩家胜利，返回构筑界面");
+            // 🔥 新增：胜利加100金币
+            int currentCoins = PlayerPrefs.GetInt("PlayerCoins", 0); // 读取当前金币，默认0
+            currentCoins += 100; // 加100
+            PlayerPrefs.SetInt("PlayerCoins", currentCoins); // 保存
+            PlayerPrefs.Save(); // 立即写入磁盘
+            Debug.Log($"🎁 获得胜利奖励100金币！当前金币：{currentCoins}");
+            SceneManager.LoadScene(backToScene);
+            return;
+        }
+        // 我方血量<=0 → 玩家战败
+        if (playerHealthPoint <= 0)
+        {
+            Debug.Log("❌ 我方血量归零，对局失败，返回构筑界面");
+            SceneManager.LoadScene(backToScene);
+            return;
+        }
+    }
+    // 刷新血量UI
+    public void RefreshHpUI()
+    {
+        if (playerHpText != null)
+            playerHpText.text = playerHealthPoint.ToString();
+
+        if (enemyHpText != null)
+            enemyHpText.text = enemyHealthPoint.ToString();
     }
 
     public void OnPlayerDrawCard()
@@ -92,11 +136,17 @@ public class BattleManager : MonoSingleton<BattleManager>
         int handCount = _player == 0 ? playerHands.transform.childCount : enemyHands.transform.childCount;
         if (handCount >= 6)
         {
-            Debug.Log("手牌已满，无法抽第7张！");
+            Debug.Log("手牌已满，无法抽第7张！直接进入战斗阶段");
+            if (_player == 0)
+                currentPhase = GamePhase.playerAction;
+            else
+                currentPhase = GamePhase.enemyAction;
+            phaseChangeEvent.Invoke();
             return;
         }
         if (_player == 0)
         {
+            if (playerDeckList.Count <= 0) return;
             for (int i = 0; i < _number; i++)
             {
                 GameObject newCard = GameObject.Instantiate(cardPrefab, playerHands.transform);
@@ -118,6 +168,8 @@ public class BattleManager : MonoSingleton<BattleManager>
         }
         else if (_player == 1)
         {
+            // 🔥 加：卡组为空直接返回
+            if (enemyDeckList.Count <= 0) return;
             for (int i = 0; i < _number; i++)
             {
                 GameObject newCard = GameObject.Instantiate(cardPrefab, enemyHands.transform);
@@ -154,8 +206,8 @@ public class BattleManager : MonoSingleton<BattleManager>
             currentPhase = GamePhase.enemyDraw;
             enemySummonCount = maxEnemySummonCount;
 
-            //playerIcon.GetComponent<AttackTarget>().attackable = true;
-            //enemyIcon.GetComponent<AttackTarget>().attackable = false;
+            playerIcon.GetComponent<AttackTarget>().attackable = true;
+            enemyIcon.GetComponent<AttackTarget>().attackable = false;
             foreach (var block in playerBlocks)
             {
                 if (block.GetComponent<CardBlock>().monsterCard != null)
@@ -177,8 +229,8 @@ public class BattleManager : MonoSingleton<BattleManager>
             currentPhase = GamePhase.playerDraw;
             playerSummonCount = maxPlayerSummonCount;
 
-            //playerIcon.GetComponent<AttackTarget>().attackable = false;
-            //enemyIcon.GetComponent<AttackTarget>().attackable = true;
+            playerIcon.GetComponent<AttackTarget>().attackable = false;
+            enemyIcon.GetComponent<AttackTarget>().attackable = true;
             foreach (var block in playerBlocks)
             {
                 if (block.GetComponent<CardBlock>().monsterCard != null)
@@ -301,10 +353,10 @@ public class BattleManager : MonoSingleton<BattleManager>
                     strightAttack = false;
                 }
             }
-            if (strightAttack)
-            {
-                // 可以直接攻击对手玩家
-            }
+            //if (strightAttack)
+            //{
+                // 可以直接攻击对手玩家-+
+            //}
         }
         if (_player == 1)
         {
@@ -316,15 +368,17 @@ public class BattleManager : MonoSingleton<BattleManager>
                     strightAttack = false;
                 }
             }
-            if (strightAttack)
-            {
+           // if (strightAttack)
+            //{
                 // 可以直接攻击对手玩家
-            }
+                
+           // }
         }
 
         attackingMonster = _monster;
         attackingID = _player;
-
+        // 🔥【仅新增这1行】把直接攻击状态存起来
+        canStraightAttack = strightAttack;
     }
     public void AttackCofirm(GameObject _target)
     {
@@ -333,6 +387,13 @@ public class BattleManager : MonoSingleton<BattleManager>
     }
     public void Attack(GameObject _monster, int _id, GameObject _target)
     {
+        // 新增：空值拦截
+        if (_monster == null)
+        {
+            Debug.LogWarning("攻击怪兽为空，跳过本次攻击");
+            if (arrow != null) Destroy(arrow);
+            return;
+        }
         //结算伤害
         //处理销毁
         //恢复攻击状态，已攻击状态
@@ -342,7 +403,39 @@ public class BattleManager : MonoSingleton<BattleManager>
         }
         _monster.GetComponent<BattleCard>().hasAttacked = true;
         Debug.Log("攻击成立");
+        // ========================
+        // 🔥【仅新增：直接攻击玩家扣血】
+        // ========================
+        if (_target == null) // 无目标 = 直接攻击玩家
+        {
+            // 获取攻击怪兽的攻击力
+            MonsterCard attacker = _monster.GetComponent<CardDisplay>().card as MonsterCard;
+            if (attacker == null) return;
 
+            // 根据攻击方，扣对应玩家血量
+            if (_id == 0)
+            {
+                // 玩家攻击 → 扣敌方血量
+                enemyHealthPoint -= attacker.attack;
+                Debug.Log("敌方玩家受到伤害！剩余血量：" + enemyHealthPoint);
+                RefreshHpUI();
+                CheckGameOver(); // 刷新血量后立刻检测对局结束
+            }
+            else
+            {
+                // 敌方攻击 → 扣我方血量
+                playerHealthPoint -= attacker.attack;
+                Debug.Log("我方玩家受到伤害！剩余血量：" + playerHealthPoint);
+                RefreshHpUI();
+                CheckGameOver(); // 刷新血量后立刻检测对局结束
+            }
+
+            // 关闭格子状态并结束方法
+            foreach (var block in playerBlocks) block.GetComponent<CardBlock>().CloseAll();
+            foreach (var block in enemyBlocks) block.GetComponent<CardBlock>().CloseAll();
+            return;
+        }
+        // ========================
         // 
         var attackMonster = _monster.GetComponent<CardDisplay>().card as MonsterCard;
         var targetMonster = _target.GetComponent<CardDisplay>().card as MonsterCard;

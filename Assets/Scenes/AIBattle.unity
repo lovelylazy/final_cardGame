@@ -251,6 +251,11 @@ PrefabInstance:
       propertyPath: m_LocalEulerAnglesHint.z
       value: 0
       objectReference: {fileID: 0}
+    - target: {fileID: 3217342048374722902, guid: 4034c732cdde54b068b218b023f1a895,
+        type: 3}
+      propertyPath: playerData
+      value: 
+      objectReference: {fileID: 4900000, guid: b51776dd930dbc8459a5568c4e77456f, type: 3}
     - target: {fileID: 3217342048421207969, guid: 4034c732cdde54b068b218b023f1a895,
         type: 3}
       propertyPath: m_Layer
@@ -320,7 +325,7 @@ MonoBehaviour:
       m_Calls: []
   m_FontData:
     m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
-    m_FontSize: 50
+    m_FontSize: 39
     m_FontStyle: 0
     m_BestFit: 0
     m_MinSize: 0
@@ -331,7 +336,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: 200
+  m_Text: 2000
 --- !u!222 &82257721
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -491,7 +496,7 @@ MonoBehaviour:
       m_Calls: []
   m_FontData:
     m_Font: {fileID: 10102, guid: 0000000000000000e000000000000000, type: 0}
-    m_FontSize: 50
+    m_FontSize: 39
     m_FontStyle: 0
     m_BestFit: 0
     m_MinSize: 0
@@ -502,7 +507,7 @@ MonoBehaviour:
     m_HorizontalOverflow: 0
     m_VerticalOverflow: 0
     m_LineSpacing: 1
-  m_Text: 200
+  m_Text: 2000
 --- !u!222 &202154062
 CanvasRenderer:
   m_ObjectHideFlags: 0
@@ -803,6 +808,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   attackable: 0
+  BattleManager: {fileID: 0}
 --- !u!114 &370096907
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -878,8 +884,10 @@ MonoBehaviour:
     type: 3}
   attackPrefab: {fileID: 7058004049670863775, guid: 472d9ede9a483419a92bf5fe8e07adb0,
     type: 3}
-  playerHealthPoint: 0
-  enemyHealthPoint: 0
+  playerHealthPoint: 2000
+  enemyHealthPoint: 2000
+  playerHpText: {fileID: 82257720}
+  enemyHpText: {fileID: 202154061}
   playerIcon: {fileID: 570636786}
   enemyIcon: {fileID: 370096902}
   maxPlayerSummonCount: 2
@@ -995,6 +1003,7 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   attackable: 0
+  BattleManager: {fileID: 0}
 --- !u!114 &570636791
 MonoBehaviour:
   m_ObjectHideFlags: 0

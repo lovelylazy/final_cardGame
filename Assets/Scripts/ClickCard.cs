@@ -5,10 +5,12 @@ using UnityEngine;
 public class ClickCard : MonoBehaviour
 {
     public DeckManager deckManger;
+    public LibraryManager LibraryManger;
     private PlayerDataManager pdm;
     // Start is called before the first frame update
     void Start()
     {
+        LibraryManger = GameObject.Find("LibraryManager").GetComponent<LibraryManager>();
         deckManger = GameObject.Find("DeckManager").GetComponent<DeckManager>();
         pdm = GameObject.Find("PlayerData").GetComponent<PlayerDataManager>();
     }
@@ -28,7 +30,10 @@ public class ClickCard : MonoBehaviour
     {
         int id = GetComponent<CardDisplay>().card.id;
         pdm.playerDeck[id] -= 1;
+        pdm.playerCards[id] += 1;
+        
         deckManger.UpdateDeck();
+        LibraryManger.UpdateLibrary();
     }
     public void OnBattleClick()
     {

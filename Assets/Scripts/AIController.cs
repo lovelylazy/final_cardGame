@@ -4,22 +4,33 @@ using UnityEngine;
 
 public class AIController : MonoBehaviour
 {
-    public float actionTimeStart = 1f;
+    /// <summary>
+    /// 行动间隔时间
+    /// </summary>
+    public float actionTimeStart;
     private float actionTime;
-    private bool hasActed = false;
 
+    bool haveBlock;
+    bool haveMonster;
+    GameObject currentMonster;
+    Transform currentBlock;
+
+
+    // Start is called before the first frame update
     void Start()
     {
         actionTime = actionTimeStart;
     }
 
+    // Update is called once per frame
     void Update()
     {
-        if (BattleManager.Instance.currentPhase == GamePhase.enemyAction && !hasActed)
+        if (AIManager.Instance.currentPhase == GamePhase.enemyDraw || BattleManager.Instance.currentPhase == GamePhase.enemyAction)
         {
             if (actionTime <= 0)
             {
                 NextStep();
+                Debug.Log("Next step");
                 actionTime = actionTimeStart;
             }
             else
@@ -27,74 +38,76 @@ public class AIController : MonoBehaviour
                 actionTime -= Time.deltaTime;
             }
         }
+
+
+
     }
 
     private void NextStep()
     {
-        hasActed = true;
-        var bm = BattleManager.Instance;
-
-        // 1. 优先召唤
-        if (bm.enemySummonCount >= 1)
+        if (BattleManager.Instance.currentPhase == GamePhase.enemyDraw)
         {
-            Transform emptyBlock = null;
-            foreach (var block in bm.enemyBlocks)
+            BattleManager.Instance.DrawCard(1, 1, true);
+        }
+        else if (BattleManager.Instance.currentPhase == GamePhase.enemyAction)
+        {
+            if (BattleManager.Instance.enemySummonCount >= 1)
             {
-                if (block.GetComponent<CardBlock>().monsterCard == null)
+                Debug.Log("执行召唤判定");
+                //执行召唤步骤
+                foreach (var block in BattleManager.Instance.enemyBlocks)
                 {
-                    emptyBlock = block.transform;
-                    break;
+                    if (block.GetComponent<CardBlock>().monsterCard == null)
+                    {
+                        haveBlock = true;
+                        currentBlock = block.transform;
+                        break;
+                    }
+                }
+                foreach (Transform child in BattleManager.Instance.enemyHands.transform)
+                {
+                    if (child.GetComponent<CardDisplay>().card is MonsterCard)
+                    {
+                        haveMonster = true;
+                        currentMonster = child.gameObject;
+                        break;
+                    }
+                }
+                if (haveBlock && haveMonster)
+                {
+                    Debug.Log("开始召唤");
+                    BattleManager.Instance.Summon(currentMonster, 1, currentBlock);
                 }
             }
-
-            GameObject monsterInHand = null;
-            foreach (Transform child in bm.enemyHands.transform)
+            else
             {
-                if (child.GetComponent<CardDisplay>().card is MonsterCard)
+                foreach (var block in BattleManager.Instance.enemyBlocks)
                 {
-                    monsterInHand = child.gameObject;
-                    break;
+                    if (block.GetComponent<CardBlock>().monsterCard != null && !block.GetComponent<CardBlock>().monsterCard.GetComponent<BattleCard>().hasAttacked)
+                    {
+                        currentMonster = block.GetComponent<CardBlock>().monsterCard;
+                        // 搜索怪兽
+                        foreach (var playerBlock in BattleManager.Instance.playerBlocks)
+                        {
+                            if (playerBlock.GetComponent<CardBlock>().monsterCard != null)
+                            {
+                                Debug.Log("开始攻击");
+                                BattleManager.Instance.Attack(currentMonster, 1, playerBlock.GetComponent<CardBlock>().monsterCard);
+                                break;
+                            }
+                            Debug.Log("回合结束");
+                            BattleManager.Instance.TurnEnd();
+                        }
+                        break;
+                    }
+                    Debug.Log("回合结束");
+                    BattleManager.Instance.TurnEnd();
                 }
+
             }
 
-            if (emptyBlock != null && monsterInHand != null)
-            {
-                bm.Summon(monsterInHand, 1, emptyBlock);
-                hasActed = false;
-                return;
-            }
         }
 
-        // 2. 再攻击
-        GameObject myMonster = null;
-        foreach (var block in bm.enemyBlocks)
-        {
-            var card = block.GetComponent<CardBlock>().monsterCard;
-            if (card != null && !card.GetComponent<BattleCard>().hasAttacked)
-            {
-                myMonster = card;
-                break;
-            }
-        }
 
-        GameObject playerMonster = null;
-        foreach (var block in bm.playerBlocks)
-        {
-            var card = block.GetComponent<CardBlock>().monsterCard;
-            if (card != null)
-            {
-                playerMonster = card;
-                break;
-            }
-        }
-
-        if (myMonster != null && playerMonster != null)
-        {
-            bm.Attack(myMonster, 1, playerMonster);
-        }
-
-        // 3. 最后结束回合（只调用1次）
-        bm.TurnEnd();
-        hasActed = false;
     }
 }

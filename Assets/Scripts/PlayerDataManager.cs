@@ -105,7 +105,7 @@ public class PlayerDataManager : MonoBehaviour
         {
             if (playerDeck[i] != 0)
             {
-                datas.Add("deck," + i.ToString() + "," + playerDeck[i].ToString());
+                datas.Add("deck," + i.ToString() + "," + playerDeck[i].ToString());//第二列为卡牌的id索引，第三列为之的数量
             }
         }
 
