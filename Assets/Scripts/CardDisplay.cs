@@ -54,7 +54,7 @@ public class CardDisplay : MonoBehaviour
         if (card is MonsterCard) // 如果是怪兽卡，就将攻击力显示为红色，生命值为绿色
         {
             var monstercard = card as MonsterCard;
-            cardAttack.text = "<color=red>" + monstercard.attack.ToString() + "</color>";
+            cardAttack.text = "<color=red>" + monstercard.GetFinalAttack().ToString() + "</color>";
             cardHealth.text = "<color=blue>" + monstercard.healthPoint.ToString() + "</color>";
             background.color = monsterColor;
             infoText.gameObject.SetActive(false);
@@ -83,4 +83,6 @@ public class CardDisplay : MonoBehaviour
     {
         backImage.SetActive(true);
     }
+
+
 }

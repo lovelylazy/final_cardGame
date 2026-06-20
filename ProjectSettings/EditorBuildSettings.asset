@@ -4,5 +4,23 @@
 EditorBuildSettings:
   m_ObjectHideFlags: 0
   serializedVersion: 2
-  m_Scenes: []
+  m_Scenes:
+  - enabled: 1
+    path: Assets/Scenes/MainScene.unity
+    guid: bb5116d57352e154aab27ca9bec1d9bf
+  - enabled: 1
+    path: Assets/Scenes/TestCardData.unity
+    guid: a9268d4b3c3a443358b7a7f49182337c
+  - enabled: 1
+    path: Assets/Scenes/BuilDeck.unity
+    guid: 97c93573411f14464a0901d1b2d0b63e
+  - enabled: 1
+    path: Assets/Scenes/AIBattle.unity
+    guid: 9e82c9a03b91eba47a812b6559e344ad
+  - enabled: 1
+    path: Assets/Scenes/VictoryScene.unity
+    guid: e7c72ef7c29a203419f68ba68184840b
+  - enabled: 1
+    path: Assets/Scenes/DefeatScene.unity
+    guid: 45e81dddf86c76749af0f6c310cf7d87
   m_configObjects: {}

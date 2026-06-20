@@ -20,6 +20,7 @@ public class AttackTarget : MonoBehaviour, IPointerClickHandler
     }
     public void OnPointerClick(PointerEventData eventData)
     {
+
         if (attackable && BattleManager.Instance.attackingMonster != null)
         {
             BattleManager.Instance.AttackCofirm(transform.gameObject);

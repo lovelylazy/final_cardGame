@@ -17,6 +17,7 @@ public class PlayerDataManager : MonoBehaviour
 
     public Text coinsText;
     public Text cardsText;
+    public Text DeckcardsText;
 
     public int totalCoins;
 
@@ -34,6 +35,7 @@ public class PlayerDataManager : MonoBehaviour
         cardData = GetComponent<CardData>();
         cardData.LordCardList();
         LordPlayerData();
+        LoadPlayerData();
     }
 
     // Update is called once per frame
@@ -77,6 +79,7 @@ public class PlayerDataManager : MonoBehaviour
     {
         coinsText.text = "Total Coins:" + totalCoins.ToString();
         cardsText.text = "Cards Number:" + Sum(playerCards).ToString();
+        DeckcardsText.text = "DeckcardNumber:" + Sum(playerDeck).ToString();
     }
 
     public int Sum(int[] _cards)
@@ -91,25 +94,104 @@ public class PlayerDataManager : MonoBehaviour
 
     public void SavePlayerData()
     {
-        List<string> datas = new List<string>();
-        string path = Application.dataPath + "/Datas/playerdata.csv";
-        datas.Add("coins," + totalCoins.ToString());
-        for (int i = 0; i < playerCards.Length; i++)
-        {
-            if (playerCards[i] != 0)
-            {
-                datas.Add("card," + i.ToString() + "," + playerCards[i].ToString());
-            }
-        }
-        for (int i = 0; i < playerDeck.Length; i++)
-        {
-            if (playerDeck[i] != 0)
-            {
-                datas.Add("deck," + i.ToString() + "," + playerDeck[i].ToString());//第二列为卡牌的id索引，第三列为之的数量
-            }
-        }
+        // 1. 使用持久化路径，打包后也能正常读写
+        string directory = Path.Combine(Application.persistentDataPath, "Datas");
+        string path = Path.Combine(directory, "playerdata.csv");
 
-        File.WriteAllLines(path, datas);
+        try
+        {
+            // 2. 自动创建目录，避免文件夹不存在报错
+            if (!Directory.Exists(directory))
+            {
+                Directory.CreateDirectory(directory);
+            }
+
+            List<string> datas = new List<string>();
+            datas.Add("coins," + totalCoins.ToString());
+
+            for (int i = 0; i < playerCards.Length; i++)
+            {
+                if (playerCards[i] != 0)
+                {
+                    datas.Add("card," + i.ToString() + "," + playerCards[i].ToString());
+                }
+            }
+
+            for (int i = 0; i < playerDeck.Length; i++)
+            {
+                if (playerDeck[i] != 0)
+                {
+                    datas.Add("deck," + i.ToString() + "," + playerDeck[i].ToString());
+                }
+            }
+
+            File.WriteAllLines(path, datas);
+            Debug.Log($"✅ 存档保存成功！路径：{path}");
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"❌ 存档保存失败：{e.Message}");
+        }
     }
+    public void LoadPlayerData()
+    {
+        string directory = Path.Combine(Application.persistentDataPath, "Datas");
+        string path = Path.Combine(directory, "playerdata.csv");
 
+        // 文件不存在就跳过，保持默认值
+        if (!File.Exists(path))
+        {
+            Debug.Log("📂 无存档文件，使用默认数据");
+            return;
+        }
+
+        try
+        {
+            // 先把数组全部初始化为0
+            for (int i = 0; i < playerCards.Length; i++) playerCards[i] = 0;
+            for (int i = 0; i < playerDeck.Length; i++) playerDeck[i] = 0;
+
+            string[] lines = File.ReadAllLines(path);
+            foreach (string line in lines)
+            {
+                if (string.IsNullOrEmpty(line)) continue;
+
+                string[] parts = line.Split(',');
+                if (parts.Length < 2) continue;
+
+                switch (parts[0])
+                {
+                    case "coins":
+                        int.TryParse(parts[1], out totalCoins);
+                        break;
+
+                    case "card":
+                        if (parts.Length >= 3)
+                        {
+                            int id = int.Parse(parts[1]);
+                            int count = int.Parse(parts[2]);
+                            // 防止索引越界
+                            if (id >= 0 && id < playerCards.Length)
+                                playerCards[id] = count;
+                        }
+                        break;
+
+                    case "deck":
+                        if (parts.Length >= 3)
+                        {
+                            int id = int.Parse(parts[1]);
+                            int count = int.Parse(parts[2]);
+                            if (id >= 0 && id < playerDeck.Length)
+                                playerDeck[id] = count;
+                        }
+                        break;
+                }
+            }
+            Debug.Log("✅ 存档加载成功");
+        }
+        catch (System.Exception e)
+        {
+            Debug.LogError($"❌ 存档加载失败：{e.Message}");
+        }
+    }
 }

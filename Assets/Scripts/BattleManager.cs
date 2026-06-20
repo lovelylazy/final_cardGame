@@ -71,6 +71,13 @@ public class BattleManager : MonoSingleton<BattleManager>
     // 🔥【仅新增这1行】标记是否可以直接攻击玩家
     private bool canStraightAttack;
 
+    public Transform playerDiscardPile; // 玩家弃牌堆（空物体即可）
+    public Transform enemyDiscardPile;  // 敌方弃牌堆
+    public LayerMask monsterLayer;       // 怪兽碰撞层（用于目标选择）
+
+    public string victoryScene = "VictoryScene";       // 胜利界面
+    public string defeatScene = "DefeatScene";         // 失败界面
+
     // Start is called before the first frame update
     void Start()
     {      
@@ -95,14 +102,14 @@ public class BattleManager : MonoSingleton<BattleManager>
             PlayerPrefs.SetInt("PlayerCoins", currentCoins); // 保存
             PlayerPrefs.Save(); // 立即写入磁盘
             Debug.Log($"🎁 获得胜利奖励100金币！当前金币：{currentCoins}");
-            SceneManager.LoadScene(backToScene);
+            SceneManager.LoadScene(victoryScene);
             return;
         }
         // 我方血量<=0 → 玩家战败
         if (playerHealthPoint <= 0)
         {
             Debug.Log("❌ 我方血量归零，对局失败，返回构筑界面");
-            SceneManager.LoadScene(backToScene);
+            SceneManager.LoadScene(defeatScene);
             return;
         }
     }
@@ -146,7 +153,13 @@ public class BattleManager : MonoSingleton<BattleManager>
         }
         if (_player == 0)
         {
-            if (playerDeckList.Count <= 0) return;
+            if (playerDeckList.Count <= 0)
+            {
+                Debug.Log("玩家卡组已空，无法抽卡，直接进入玩家行动阶段");
+                currentPhase = GamePhase.playerAction;
+                phaseChangeEvent.Invoke();
+                return;
+            }
             for (int i = 0; i < _number; i++)
             {
                 GameObject newCard = GameObject.Instantiate(cardPrefab, playerHands.transform);
@@ -169,7 +182,13 @@ public class BattleManager : MonoSingleton<BattleManager>
         else if (_player == 1)
         {
             // 🔥 加：卡组为空直接返回
-            if (enemyDeckList.Count <= 0) return;
+            if (enemyDeckList.Count <= 0)
+            {
+                Debug.Log("敌方卡组已空，无法抽卡，直接进入敌方行动阶段");
+                currentPhase = GamePhase.enemyAction;
+                phaseChangeEvent.Invoke();
+                return;
+            }
             for (int i = 0; i < _number; i++)
             {
                 GameObject newCard = GameObject.Instantiate(cardPrefab, enemyHands.transform);
@@ -250,7 +269,207 @@ public class BattleManager : MonoSingleton<BattleManager>
         phaseChangeEvent.Invoke();
     }
 
+    /// <summary>
+    /// 统一使用卡牌入口（法术/装备/怪兽卡）
+    /// </summary>
+    /// <param name="_player">使用者编号（0=玩家，1=AI）</param>
+    /// <param name="_cardObject">要使用的卡牌物体</param>
+    public void UseCard(int _player, GameObject _cardObject)
+    {
+        CardDisplay cardDisplay = _cardObject.GetComponent<CardDisplay>();
+        if (cardDisplay == null || cardDisplay.card == null) return;
 
+        Card usedCard = cardDisplay.card;
+        Transform handTransform = _player == 0 ? playerHands.transform : enemyHands.transform;
+        Transform discardTransform = _player == 0 ? playerDiscardPile : enemyDiscardPile;
+
+        // 按卡牌类型处理逻辑
+        switch (usedCard.cardType)
+        {
+            case CardType.Monster: // 怪兽卡，走原有召唤逻辑
+                Debug.Log("怪兽卡请使用召唤功能");
+                return;
+            case CardType.Spell: // 法术卡，走攻击判定流程
+                HandleSpellCard(_player, usedCard as SpellCard, _cardObject);
+                break;
+            case CardType.Item: // 装备卡，修改怪兽数值
+                HandleItemCard(_player, usedCard as ItemCard, _cardObject);
+                break;
+        }
+
+        // 处理弃牌（装备卡除外）
+        if (usedCard.cardType != CardType.Item || (usedCard as ItemCard).type != "装备")
+        {
+            _cardObject.transform.SetParent(discardTransform);
+            _cardObject.SetActive(false);
+        }
+
+        // 刷新回合状态
+        if (_player == 0)
+        {
+            currentPhase = GamePhase.playerAction;
+        }
+        else
+        {
+            currentPhase = GamePhase.enemyAction;
+        }
+        phaseChangeEvent.Invoke();
+    }
+
+    /// <summary>
+    /// 处理法术卡逻辑（和怪兽攻击走一样的判定流程）
+    /// </summary>
+    private void HandleSpellCard(int _player, SpellCard _spellCard, GameObject _cardObject)
+    {
+        Debug.Log($"使用法术卡：{_spellCard.cardName}，效果：{_spellCard.effect}");
+
+        // 1. 确定攻击目标
+        GameObject target = null;
+        if (_spellCard.targetType == TargetType.EnemyPlayer)
+        {
+            // 目标为敌方玩家，直接造成伤害
+            if (_player == 0)
+            {
+                enemyHealthPoint -= _spellCard.damageValue;
+                enemyHealthPoint = Mathf.Max(enemyHealthPoint, 0);
+                Debug.Log($"对敌方玩家造成{_spellCard.damageValue}点伤害，剩余血量：{enemyHealthPoint}");
+                RefreshHpUI();
+                CheckGameOver();
+            }
+            else
+            {
+                playerHealthPoint -= _spellCard.damageValue;
+                playerHealthPoint = Mathf.Max(playerHealthPoint, 0);
+                Debug.Log($"对我方玩家造成{_spellCard.damageValue}点伤害，剩余血量：{playerHealthPoint}");
+                RefreshHpUI();
+                CheckGameOver();
+            }
+            // 生成箭头（从手牌指向敌方玩家）
+            GenerateAttackArrow(_cardObject.transform.position, _player == 0 ? enemyIcon.transform.position : playerIcon.transform.position);
+            return;
+        }
+        else if (_spellCard.targetType == TargetType.EnemyMonster)
+        {
+            // 目标为敌方怪兽，自动选择第一个敌方怪兽
+            GameObject[] targetBlocks = _player == 0 ? enemyBlocks : playerBlocks;
+            foreach (var block in targetBlocks)
+            {
+                GameObject monsterCard = block.GetComponent<CardBlock>().monsterCard;
+                if (monsterCard != null)
+                {
+                    target = monsterCard;
+                    break;
+                }
+            }
+        }
+        else if (_spellCard.targetType == TargetType.AllyMonster)
+        {
+            // 目标为我方怪兽，自动选择第一个我方怪兽
+            GameObject[] allyBlocks = _player == 0 ? playerBlocks : enemyBlocks;
+            foreach (var block in allyBlocks)
+            {
+                GameObject monsterCard = block.GetComponent<CardBlock>().monsterCard;
+                if (monsterCard != null)
+                {
+                    target = monsterCard;
+                    break;
+                }
+            }
+        }
+
+        // 2. 对目标怪兽造成伤害（复用原有攻击逻辑）
+        if (target != null)
+        {
+            MonsterCard targetMonster = target.GetComponent<CardDisplay>().card as MonsterCard;
+            if (targetMonster != null)
+            {
+                targetMonster.GetDamage(_spellCard.damageValue);
+                Debug.Log($"对{targetMonster.cardName}造成{_spellCard.damageValue}点伤害，剩余血量：{targetMonster.healthPoint}");
+                // 生成箭头（从手牌指向目标怪兽）
+                GenerateAttackArrow(_cardObject.transform.position, target.transform.position);
+                // 刷新怪兽血量显示
+                target.GetComponent<CardDisplay>().ShowCard();
+                // 检查怪兽是否被摧毁
+                if (targetMonster.healthPoint <= 0)
+                {
+                    Destroy(target);
+                }
+            }
+        }
+    }
+
+    /// <summary>
+    /// 处理装备卡逻辑（修改怪兽数值）
+    /// </summary>
+    private void HandleItemCard(int _player, ItemCard _itemCard, GameObject _cardObject)
+    {
+        Debug.Log($"使用装备卡：{_itemCard.cardName}，效果：{_itemCard.effect}");
+
+        // 1. 找到目标我方怪兽
+        GameObject targetMonster = null;
+        GameObject[] allyBlocks = _player == 0 ? playerBlocks : enemyBlocks;
+        foreach (var block in allyBlocks)
+        {
+            GameObject monsterCard = block.GetComponent<CardBlock>().monsterCard;
+            if (monsterCard != null)
+            {
+                targetMonster = monsterCard;
+                break;
+            }
+        }
+
+        if (targetMonster == null)
+        {
+            Debug.Log("没有可装备的怪兽，装备卡进入弃牌堆");
+            _cardObject.transform.SetParent(_player == 0 ? playerDiscardPile : enemyDiscardPile);
+            _cardObject.SetActive(false);
+            return;
+        }
+
+        // 2. 给怪兽添加装备数值
+        MonsterCard monster = targetMonster.GetComponent<CardDisplay>().card as MonsterCard;
+        if (monster != null)
+        {
+            monster.equipAttackBuff += _itemCard.attackBuff;
+            monster.equipHealthBuff += _itemCard.healthBuff;
+            monster.equippedItems.Add(_itemCard);
+            // 新增：使用药水立刻恢复对应数值的当前生命值，不超过上限
+            monster.healthPoint = Mathf.Min(
+                monster.healthPoint + _itemCard.healthBuff,
+                monster.GetFinalHealthMax()
+            );
+
+            Debug.Log($"给{monster.cardName}装备{_itemCard.cardName}，攻击力+{_itemCard.attackBuff}，生命值+{_itemCard.healthBuff}");
+            Debug.Log($"最终攻击力：{monster.GetFinalAttack()}，最终生命上限：{monster.GetFinalHealthMax()}");
+
+            // 生成箭头（从手牌指向装备的怪兽）
+            GenerateAttackArrow(_cardObject.transform.position, targetMonster.transform.position);
+            // 刷新怪兽UI显示
+            targetMonster.GetComponent<CardDisplay>().ShowCard();
+            // 装备卡隐藏，不进入弃牌堆
+            _cardObject.SetActive(false);
+        }
+    }
+
+    /// <summary>
+    /// 生成攻击箭头（和怪兽攻击用同一个逻辑）
+    /// </summary>
+    private void GenerateAttackArrow(Vector3 startPos, Vector3 endPos)
+    {
+        if (arrowPrefab == null) return;
+
+        // 实例化箭头
+        GameObject arrow = Instantiate(arrowPrefab, startPos, Quaternion.identity);
+        // 计算箭头方向
+        Vector3 direction = endPos - startPos;
+        float angle = Mathf.Atan2(direction.y, direction.x) * Mathf.Rad2Deg;
+        arrow.transform.rotation = Quaternion.Euler(0, 0, angle);
+        // 拉伸箭头长度
+        float distance = Vector3.Distance(startPos, endPos);
+        arrow.transform.localScale = new Vector3(distance / 100f, 1f, 1f);
+        // 箭头自动销毁
+        Destroy(arrow, 0.5f);
+    }
 
     public void SummonRequst(Vector2 _startPoint, int _player, GameObject _monster) // 召唤请求，点击手牌时触发
     {
@@ -301,6 +520,20 @@ public class BattleManager : MonoSingleton<BattleManager>
     /// <param name="_block">要召唤到的格子节点</param>
     public void Summon(GameObject _monster, int _id, Transform _block)
     {
+        // ========== 入口空值校验 ==========
+        if (_monster == null || _block == null)
+        {
+            Debug.LogWarning("召唤失败：怪兽或格子对象为空/已销毁");
+            if (arrow != null) Destroy(arrow);
+            return;
+        }
+
+        CardBlock blockScript = _block.GetComponent<CardBlock>();
+        if (blockScript == null)
+        {
+            Debug.LogWarning("召唤失败：格子缺少CardBlock组件");
+            return;
+        }
         _monster.transform.SetParent(_block);
         _monster.GetComponent<CardDisplay>().ShowCard();
         _block.GetComponent<CardBlock>().monsterCard = _monster;
@@ -353,9 +586,13 @@ public class BattleManager : MonoSingleton<BattleManager>
                     strightAttack = false;
                 }
             }
+
+             // 新增：自动设置敌方头像Tag
+            enemyIcon.tag = strightAttack ? "Attackable" : "Unattackable";
+
             //if (strightAttack)
             //{
-                // 可以直接攻击对手玩家-+
+            // 可以直接攻击对手玩家-+
             //}
         }
         if (_player == 1)
@@ -368,11 +605,14 @@ public class BattleManager : MonoSingleton<BattleManager>
                     strightAttack = false;
                 }
             }
-           // if (strightAttack)
+            // 新增：自动设置玩家头像Tag
+            playerIcon.tag = strightAttack ? "Attackable" : "Unattackable";
+
+            // if (strightAttack)
             //{
-                // 可以直接攻击对手玩家
-                
-           // }
+            // 可以直接攻击对手玩家
+
+            // }
         }
 
         attackingMonster = _monster;
@@ -387,72 +627,91 @@ public class BattleManager : MonoSingleton<BattleManager>
     }
     public void Attack(GameObject _monster, int _id, GameObject _target)
     {
-        // 新增：空值拦截
+        // 1. 攻击怪兽自身为空，直接拦截
         if (_monster == null)
         {
             Debug.LogWarning("攻击怪兽为空，跳过本次攻击");
             if (arrow != null) Destroy(arrow);
+            CloseAllBlockState();
             return;
         }
-        //结算伤害
-        //处理销毁
-        //恢复攻击状态，已攻击状态
+
         if (arrow != null)
         {
             Destroy(arrow);
         }
         _monster.GetComponent<BattleCard>().hasAttacked = true;
         Debug.Log("攻击成立");
-        // ========================
-        // 🔥【仅新增：直接攻击玩家扣血】
-        // ========================
-        if (_target == null) // 无目标 = 直接攻击玩家
-        {
-            // 获取攻击怪兽的攻击力
-            MonsterCard attacker = _monster.GetComponent<CardDisplay>().card as MonsterCard;
-            if (attacker == null) return;
 
-            // 根据攻击方，扣对应玩家血量
+        // 2. 目标为空 → 直接攻击玩家（原有逻辑）
+        if (_target == null)
+        {
+            MonsterCard attacker = _monster.GetComponent<CardDisplay>()?.card as MonsterCard;
+            if (attacker == null)
+            {
+                Debug.LogWarning("攻击方卡牌数据为空，攻击无效");
+                CloseAllBlockState();
+                return;
+            }
+
             if (_id == 0)
             {
-                // 玩家攻击 → 扣敌方血量
-                enemyHealthPoint -= attacker.attack;
+                enemyHealthPoint -= attacker.GetFinalAttack();
+                enemyHealthPoint = Mathf.Max(enemyHealthPoint, 0);
                 Debug.Log("敌方玩家受到伤害！剩余血量：" + enemyHealthPoint);
                 RefreshHpUI();
-                CheckGameOver(); // 刷新血量后立刻检测对局结束
+                CheckGameOver();
             }
             else
             {
-                // 敌方攻击 → 扣我方血量
-                playerHealthPoint -= attacker.attack;
+                playerHealthPoint -= attacker.GetFinalAttack();
+                playerHealthPoint = Mathf.Max(playerHealthPoint, 0);
                 Debug.Log("我方玩家受到伤害！剩余血量：" + playerHealthPoint);
                 RefreshHpUI();
-                CheckGameOver(); // 刷新血量后立刻检测对局结束
+                CheckGameOver();
             }
-
-            // 关闭格子状态并结束方法
-            foreach (var block in playerBlocks) block.GetComponent<CardBlock>().CloseAll();
-            foreach (var block in enemyBlocks) block.GetComponent<CardBlock>().CloseAll();
+            CloseAllBlockState();
             return;
         }
-        // ========================
-        // 
-        var attackMonster = _monster.GetComponent<CardDisplay>().card as MonsterCard;
-        var targetMonster = _target.GetComponent<CardDisplay>().card as MonsterCard;
-        //Debug.Log(targetMonster.healthPoint);
-        targetMonster.GetDamage(attackMonster.attack);
+
+        // 3. 目标是玩家头像（不可攻击的Tag）→ 拦截并返回
+        if (_target.CompareTag("Unattackable"))
+        {
+            Debug.Log("场上有怪兽，禁止直接攻击玩家");
+            CloseAllBlockState();
+            return;
+        }
+
+        // 4. 目标是怪兽 → 校验组件和数据，再结算伤害
+        var attackMonster = _monster.GetComponent<CardDisplay>()?.card as MonsterCard;
+        var targetMonster = _target.GetComponent<CardDisplay>()?.card as MonsterCard;
+
+        // 任意一方卡牌数据为空，都不执行伤害
+        if (attackMonster == null || targetMonster == null)
+        {
+            Debug.LogWarning("攻击方或目标方卡牌数据异常，跳过伤害结算");
+            CloseAllBlockState();
+            return;
+        }
+
+        targetMonster.GetDamage(attackMonster.GetFinalAttack());
         if (targetMonster.healthPoint > 0)
         {
             _target.GetComponent<CardDisplay>().ShowCard();
         }
         else
         {
-            // 🔥 新增：清空区块引用，避免空引用
+            // 先清空格子引用，再销毁对象，避免残留引用
             _target.GetComponentInParent<CardBlock>().monsterCard = null;
             Destroy(_target);
         }
 
+        CloseAllBlockState();
+    }
 
+    // 封装关闭所有格子状态的方法，避免重复代码
+    private void CloseAllBlockState()
+    {
         foreach (var block in playerBlocks)
         {
             block.GetComponent<CardBlock>().CloseAll();
